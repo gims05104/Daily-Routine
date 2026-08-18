@@ -1,7 +1,6 @@
 // --------------------------------------------------
 // [위치 1] 무조건 파일의 최상단 (맨 처음)
 // --------------------------------------------------
-import { Redis } from '@upstash/redis';
 
 
 
@@ -1210,13 +1209,9 @@ const NAV: { id: Page; label: string; icon: string }[] = [
 // --------------------------------------------------
 export default function App() {
   // 👈 [여기에 복사 붙여넣기] 컴포넌트 내부로 안전하게 자리를 이동합니다.
-  const redis = new Redis({
-    url: import.meta.env.VITE_KV_REST_API_URL || '',
-    token: import.meta.env.VITE_KV_REST_API_TOKEN || '',
-  });
-
-  const [page, setPage] = useState<Page>('routine')
-  // ... 기존의 useState 코드들 이어서 시작 ...
+  // 빌드 에러 유발 요소를 완벽히 제거한 온라인 DB 연결 값 설정
+const KV_URL = import.meta.env.VITE_KV_REST_API_URL || '';
+const KV_TOKEN = import.meta.env.VITE_KV_REST_API_TOKEN || '';
 
 
 
@@ -1230,57 +1225,82 @@ export default function App() {
   const [logs, setLogs] = useState<LogEntry[]>(initialLogs)
   const [retros, setRetros] = useState<Retro[]>(initialRetros)
 
-  // 앱이 켜질 때 온라인 DB에서 데이터를 안전하게 가져오는 로직
+    // 1. 앱이 처음 켜질 때 온라인 DB에서 데이터를 안전하게 원격 로딩
   useEffect(() => {
     const loadAllDataFromDB = async () => {
+      if (!KV_URL || !KV_TOKEN) return;
       try {
-        const savedJobs = await redis.get('db-jobs')
-        const savedLogs = await redis.get('db-logs')
-        const savedRetros = await redis.get('db-retros')
+        // HTTP 통신으로 데이터를 직접 요청합니다 (빌드 에러 0%)
+        const res = await fetch(`${KV_URL}/mget/db-jobs/db-logs/db-retros`, {
+          headers: { Authorization: `Bearer ${KV_TOKEN}` }
+        });
+        const result = await res.json();
+        
+        if (result && Array.isArray(result.result)) {
+          const [savedJobs, savedLogs, savedRetros] = result.result;
 
-        if (savedJobs) {
-          const parsedJobs = typeof savedJobs === 'string' ? JSON.parse(savedJobs) : savedJobs
-          if (Array.isArray(parsedJobs)) setJobs(parsedJobs)
-        }
-        if (savedLogs) {
-          const parsedLogs = typeof savedLogs === 'string' ? JSON.parse(savedLogs) : savedLogs
-          if (Array.isArray(parsedLogs)) setLogs(parsedLogs)
-        }
-        if (savedRetros) {
-          const parsedRetros = typeof savedRetros === 'string' ? JSON.parse(savedRetros) : savedRetros
-          if (Array.isArray(parsedRetros)) setRetros(parsedRetros)
+          if (savedJobs) {
+            const parsedJobs = typeof savedJobs === 'string' ? JSON.parse(savedJobs) : savedJobs;
+            if (Array.isArray(parsedJobs)) setJobs(parsedJobs);
+          }
+          if (savedLogs) {
+            const parsedLogs = typeof savedLogs === 'string' ? JSON.parse(savedLogs) : savedLogs;
+            if (Array.isArray(parsedLogs)) setLogs(parsedLogs);
+          }
+          if (savedRetros) {
+            const parsedRetros = typeof savedRetros === 'string' ? JSON.parse(savedRetros) : savedRetros;
+            if (Array.isArray(parsedRetros)) setRetros(parsedRetros);
+          }
         }
       } catch (error) {
-        console.error('DB 데이터를 불러오는 중 오류 발생:', error)
+        console.error('DB 데이터를 불러오는 중 오류 발생:', error);
       }
-    }
-    loadAllDataFromDB()
-  }, [])
+    };
+    loadAllDataFromDB();
+  }, []);
 
-  // 데이터가 새로 추가되거나 바뀔 때만 온라인 DB에 실시간 자동 저장
+  // 2. 데이터가 새로 추가되거나 바뀔 때마다 온라인 DB에 안전하게 원격 자동 저장
   useEffect(() => {
-    if (JSON.stringify(jobs) === JSON.stringify(initialJobs)) return
+    if (JSON.stringify(jobs) === JSON.stringify(initialJobs) || !KV_URL || !KV_TOKEN) return;
     const saveData = async () => {
-      try { await redis.set('db-jobs', JSON.stringify(jobs)) } catch (e) { console.error(e) }
-    }
-    saveData()
-  }, [jobs])
-
-  useEffect(() => {
-    if (JSON.stringify(logs) === JSON.stringify(initialLogs)) return
-    const saveData = async () => {
-      try { await redis.set('db-logs', JSON.stringify(logs)) } catch (e) { console.error(e) }
-    }
-    saveData()
-  }, [logs])
+      try {
+        await fetch(`${KV_URL}/set/db-jobs`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${KV_TOKEN}` },
+          body: JSON.stringify(jobs)
+        });
+      } catch (e) { console.error(e); }
+    };
+    saveData();
+  }, [jobs]);
 
   useEffect(() => {
-    if (JSON.stringify(retros) === JSON.stringify(initialRetros)) return
+    if (JSON.stringify(logs) === JSON.stringify(initialLogs) || !KV_URL || !KV_TOKEN) return;
     const saveData = async () => {
-      try { await redis.set('db-retros', JSON.stringify(retros)) } catch (e) { console.error(e) }
-    }
-    saveData()
-  }, [retros])
+      try {
+        await fetch(`${KV_URL}/set/db-logs`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${KV_TOKEN}` },
+          body: JSON.stringify(logs)
+        });
+      } catch (e) { console.error(e); }
+    };
+    saveData();
+  }, [logs]);
+
+  useEffect(() => {
+    if (JSON.stringify(retros) === JSON.stringify(initialRetros) || !KV_URL || !KV_TOKEN) return;
+    const saveData = async () => {
+      try {
+        await fetch(`${KV_URL}/set/db-retros`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${KV_TOKEN}` },
+          body: JSON.stringify(retros)
+        });
+      } catch (e) { console.error(e); }
+    };
+    saveData();
+  }, [retros]);
 
 
   const [searchQuery, setSearchQuery] = useState('')
