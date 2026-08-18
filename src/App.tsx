@@ -1209,9 +1209,10 @@ const NAV: { id: Page; label: string; icon: string }[] = [
 // [위치 2] 컴포넌트(함수) 바깥쪽, 상단 코드 바로 아래
 // --------------------------------------------------
 const redis = new Redis({
-  url: process.env.KV_REST_API_URL || process.env.VITE_KV_REST_API_URL,
-  token: process.env.KV_REST_API_TOKEN || process.env.VITE_KV_REST_API_TOKEN,
+  url: import.meta.env.VITE_KV_REST_API_URL || '',
+  token: import.meta.env.VITE_KV_REST_API_TOKEN || '',
 })
+
  // 👈 [추가] DB 연결 열쇠 초기화
 
 export default function App() {
