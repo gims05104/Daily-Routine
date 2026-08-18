@@ -1194,36 +1194,23 @@ function CalendarPage() {
   )
 }
 
-// --------------------------------------------------
-// ─── App Shell ────────────────────────────────────────────
-
-const NAV: { id: Page; label: string; icon: string } = [
-  { id: 'routine', label: '루틴', icon: '◎' },
-  { id: 'jobs', label: '채용공고', icon: '◈' },
-  { id: 'log', label: '일지', icon: '◇' },
-  { id: 'retro', label: '회고록', icon: '✦' },
-  { id: 'calendar', label: '캘린더', icon: '▦' },
-]
-
-// 최신 Vite/Rolldown 빌드 엔진의 토큰 에러를 완벽하게 우회하는 안전한 문자열 선언 방식입니다.
+// 최신 Vite 빌드 엔진의 토큰 해석 오류를 완벽하게 우회하는 안전한 문자열 선언 방식입니다.
 const KV_URL = String(import.meta.env.VITE_KV_REST_API_URL || '');
 const KV_TOKEN = String(import.meta.env.VITE_KV_REST_API_TOKEN || '');
 
 export default function App() {
- const [page, setPage] = useState<Page>('routine')
-
+  const [page, setPage] = useState<Page>('routine')
 
   // 검색이 여러 탭의 데이터를 가로질러 동작하도록 최상위에서 관리
   const [jobs, setJobs] = useState<Job[]>(initialJobs)
   const [logs, setLogs] = useState<LogEntry[]>(initialLogs)
   const [retros, setRetros] = useState<Retro[]>(initialRetros)
 
-    // 1. 앱이 처음 켜질 때 온라인 DB에서 데이터를 안전하게 원격 로딩
+  // 1. 앱이 처음 켜질 때 온라인 DB에서 데이터를 안전하게 원격 로딩
   useEffect(() => {
     const loadAllDataFromDB = async () => {
       if (!KV_URL || !KV_TOKEN) return;
       try {
-        // HTTP 통신으로 데이터를 직접 요청합니다 (빌드 에러 0%)
         const res = await fetch(`${KV_URL}/mget/db-jobs/db-logs/db-retros`, {
           headers: { Authorization: `Bearer ${KV_TOKEN}` }
         });
@@ -1295,7 +1282,6 @@ export default function App() {
     saveData();
   }, [retros]);
 
-
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [jumpJob, setJumpJob] = useState<{ id: string; ts: number } | null>(null)
@@ -1320,87 +1306,88 @@ export default function App() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#F5F3EF', fontFamily: 'Inter, sans-serif' }}>
       {/* Header */}
-      <header style={{ borderBottom: '1px solid #D4CFC8', backgroundColor: '#F5F3EF', position: 'sticky', top: 0, zIndex: 10 }}>
-        <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px', display: 'flex', alignItems: 'stretch', height: 56 }}>
-          {/* Logo */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 24, flexShrink: 0 }}>
-            <span style={{ fontFamily: 'DM Serif Display, serif', fontSize: 18, color: '#1A1816', letterSpacing: '-0.01em' }}>Daily</span>
-            <div style={{ width: 1, height: 16, backgroundColor: '#D4CFC8' }} />
-            <span style={{ fontSize: 11, color: '#7A746C', fontWeight: 500, letterSpacing: '0.06em' }}>{dayStr} {dateStr}</span>
+      <header style={{ borderBottom: '1px solid #D4CFC8', backgroundColor: '#F5F3EF', position: 'sticky', top: 0, zIndex: 10, width: '100%', overflowX: 'hidden' }}>
+        <div style={{ width: '100%', maxWidth: 720, margin: '0 auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10, paddingItem: '12px 16px' }}>
+          {/* Top row: Logo & Search */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 48, gap: 12, width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <span style={{ fontFamily: 'DM Serif Display, serif', fontSize: 18, color: '#1A1816', letterSpacing: '-0.01em' }}>Daily</span>
+              <div style={{ width: 1, height: 14, backgroundColor: '#D4CFC8' }} />
+              <span style={{ fontSize: 10, color: '#7A746C', fontWeight: 500, letterSpacing: '0.04em' }}>{dayStr} {dateStr}</span>
+            </div>
+
+            {/* Search input container */}
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1, maxWidth: 200 }}>
+              <span style={{ position: 'absolute', left: 10, fontSize: 12, color: '#7A746C', pointerEvents: 'none' }}>🔍</span>
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                placeholder="검색..."
+                style={{ width: '100%', border: '1px solid #D4CFC8', borderRadius: 20, padding: '6px 12px 6px 28px', fontSize: 12, fontFamily: 'Inter, sans-serif', outline: 'none', backgroundColor: '#FFFFFF', color: '#1A1816', boxSizing: 'border-box' }}
+              />
+              {searchFocused && searchQuery.trim() && (
+                <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 280, maxHeight: 300, overflowY: 'auto', background: '#FFFFFF', border: '1px solid #D4CFC8', borderRadius: 6, boxShadow: '0 10px 28px rgba(26,24,22,0.12)', zIndex: 50 }}>
+                  {searchResults.length === 0 ? (
+                    <div style={{ padding: '18px 14px', fontSize: 12, color: '#7A746C', textAlign: 'center' }}>
+                      '{searchQuery}' 결과 없음
+                    </div>
+                  ) : (
+                    searchResults.map(r => (
+                      <button key={r.key} onClick={() => handleResultClick(r)}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', borderBottom: '1px solid #F0EDE8', cursor: 'pointer' }}>
+                        <div style={{ fontSize: 10, color: '#8B9EC2', fontWeight: 700, letterSpacing: '0.04em', marginBottom: 3 }}>{r.typeLabel}</div>
+                        <div style={{ fontSize: 13, color: '#1A1816', fontWeight: 500, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                        {r.snippet && <div style={{ fontSize: 11, color: '#7A746C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.snippet}</div>}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Search */}
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', marginRight: 24, flexShrink: 0 }}>
-            <span style={{ position: 'absolute', left: 10, fontSize: 12, color: '#7A746C', pointerEvents: 'none' }}>🔍</span>
-            <input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-              placeholder="검색..."
-              style={{ width: 168, border: '1px solid #D4CFC8', borderRadius: 20, padding: '6px 12px 6px 28px', fontSize: 12, fontFamily: 'Inter, sans-serif', outline: 'none', backgroundColor: '#FFFFFF', color: '#1A1816' }}
-            />
-            {searchFocused && searchQuery.trim() && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 320, maxHeight: 380, overflowY: 'auto', background: '#FFFFFF', border: '1px solid #D4CFC8', borderRadius: 6, boxShadow: '0 10px 28px rgba(26,24,22,0.12)', zIndex: 50 }}>
-                {searchResults.length === 0 ? (
-                  <div style={{ padding: '18px 14px', fontSize: 12, color: '#7A746C', textAlign: 'center' }}>
-                    '{searchQuery}'에 대한 검색 결과가 없어요
-                  </div>
-                ) : (
-                  searchResults.map(r => (
-                    <button key={r.key} onClick={() => handleResultClick(r)}
-                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', borderBottom: '1px solid #F0EDE8', cursor: 'pointer' }}>
-                      <div style={{ fontSize: 10, color: '#8B9EC2', fontWeight: 700, letterSpacing: '0.04em', marginBottom: 3 }}>{r.typeLabel}</div>
-                      <div style={{ fontSize: 13, color: '#1A1816', fontWeight: 500, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
-                      {r.snippet && <div style={{ fontSize: 11, color: '#7A746C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.snippet}</div>}
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Nav */}
-<nav style={{ 
-  display: 'flex', 
-  alignItems: 'stretch', 
-  gap: 0, 
-  overflowX: 'auto',          // 👈 가로 스크롤을 활성화합니다.
-  WebkitOverflowScrolling: 'touch', // 👈 모바일에서 부드러운 스크롤을 지원합니다.
-  msOverflowStyle: 'none',    // IE 스크롤바 숨기기
-  scrollbarWidth: 'none'      // 파이어폭스 스크롤바 숨기기
-}}>
-          {NAV.map(n => (
-          <button key={n.id} onClick={() => setPage(n.id)}
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 7, 
-              padding: '0 18px', 
-              background: 'none', 
-              border: 'none', 
-              borderBottom: `2px solid ${page === n.id ? '#1A1816' : 'transparent'}`, 
-              cursor: 'pointer', 
-              color: page === n.id ? '#1A1816' : '#7A746C', 
-              fontSize: 13, 
-              fontFamily: 'Inter, sans-serif', 
-              fontWeight: page === n.id ? 600 : 400, 
-              transition: 'all 0.15s', 
-              whiteSpace: 'nowrap',
-              flexShrink: 0
-            }}>
-            <span style={{ fontSize: 14 }}>{n.icon}</span>
-            {n.label}
-          </button>
-        ))}
-
-</nav>
-
+          {/* Bottom row: Nav Menu with safe horizontal scrolling */}
+          <nav style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 4, 
+            overflowX: 'auto', 
+            width: '100%',
+            paddingBottom: '4px',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none'
+          }}>
+            {NAV.map(n => (
+              <button key={n.id} onClick={() => setPage(n.id)}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 6, 
+                  padding: '8px 14px', 
+                  background: 'none', 
+                  border: 'none', 
+                  borderBottom: `2px solid ${page === n.id ? '#1A1816' : 'transparent'}`, 
+                  cursor: 'pointer', 
+                  color: page === n.id ? '#1A1816' : '#7A746C', 
+                  fontSize: 13, 
+                  fontFamily: 'Inter, sans-serif', 
+                  fontWeight: page === n.id ? 600 : 400, 
+                  transition: 'all 0.15s', 
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}>
+                <span style={{ fontSize: 14 }}>{n.icon}</span>
+                {n.label}
+              </button>
+            ))}
+          </nav>
         </div>
       </header>
 
       {/* Main */}
-      <main style={{ maxWidth: 720, margin: '0 auto', padding: '36px 24px 60px' }}>
+      <main style={{ maxWidth: 720, margin: '0 auto', padding: '24px 16px 60px', boxSizing: 'border-box' }}>
         {page === 'routine' && <RoutinePage />}
         {page === 'jobs' && <JobsPage jobs={jobs} setJobs={setJobs} jumpJob={jumpJob} />}
         {page === 'log' && <LogPage logs={logs} setLogs={setLogs} jumpLog={jumpLog} />}
