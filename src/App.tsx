@@ -1,3 +1,10 @@
+// --------------------------------------------------
+// [위치 1] 무조건 파일의 최상단 (맨 처음)
+// --------------------------------------------------
+import { Redis } from '@upstash/redis';
+
+
+
 import { useState, useEffect, useRef } from 'react'
 
 function useLocalStorage<T>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] {
@@ -1198,13 +1205,75 @@ const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'calendar', label: '캘린더', icon: '▦' },
 ]
 
+/ --------------------------------------------------
+// [위치 2] 컴포넌트(함수) 바깥쪽, 상단 코드 바로 아래
+// --------------------------------------------------
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL || process.env.VITE_KV_REST_API_URL,
+  token: process.env.KV_REST_API_TOKEN || process.env.VITE_KV_REST_API_TOKEN,
+})
+ // 👈 [추가] DB 연결 열쇠 초기화
+
 export default function App() {
   const [page, setPage] = useState<Page>('routine')
 
   // 검색이 여러 탭의 데이터를 가로질러 동작하도록 최상위에서 관리
-  const [jobs, setJobs] = useLocalStorage<Job[]>('daily-jobs', initialJobs)
-  const [logs, setLogs] = useLocalStorage<LogEntry[]>('daily-logs', initialLogs)
-  const [retros, setRetros] = useLocalStorage<Retro[]>('daily-retros', initialRetros)
+  const [jobs, setJobs] = useState<Job[]>(initialJobs)
+  const [logs, setLogs] = useState<LogEntry[]>(initialLogs)
+  const [retros, setRetros] = useState<Retro[]>(initialRetros)
+
+  // 앱이 켜질 때 온라인 DB에서 데이터를 안전하게 가져오는 로직
+  useEffect(() => {
+    const loadAllDataFromDB = async () => {
+      try {
+        const savedJobs = await redis.get('db-jobs')
+        const savedLogs = await redis.get('db-logs')
+        const savedRetros = await redis.get('db-retros')
+
+        if (savedJobs) {
+          const parsedJobs = typeof savedJobs === 'string' ? JSON.parse(savedJobs) : savedJobs
+          if (Array.isArray(parsedJobs)) setJobs(parsedJobs)
+        }
+        if (savedLogs) {
+          const parsedLogs = typeof savedLogs === 'string' ? JSON.parse(savedLogs) : savedLogs
+          if (Array.isArray(parsedLogs)) setLogs(parsedLogs)
+        }
+        if (savedRetros) {
+          const parsedRetros = typeof savedRetros === 'string' ? JSON.parse(savedRetros) : savedRetros
+          if (Array.isArray(parsedRetros)) setRetros(parsedRetros)
+        }
+      } catch (error) {
+        console.error('DB 데이터를 불러오는 중 오류 발생:', error)
+      }
+    }
+    loadAllDataFromDB()
+  }, [])
+
+  // 데이터가 새로 추가되거나 바뀔 때만 온라인 DB에 실시간 자동 저장
+  useEffect(() => {
+    if (JSON.stringify(jobs) === JSON.stringify(initialJobs)) return
+    const saveData = async () => {
+      try { await redis.set('db-jobs', JSON.stringify(jobs)) } catch (e) { console.error(e) }
+    }
+    saveData()
+  }, [jobs])
+
+  useEffect(() => {
+    if (JSON.stringify(logs) === JSON.stringify(initialLogs)) return
+    const saveData = async () => {
+      try { await redis.set('db-logs', JSON.stringify(logs)) } catch (e) { console.error(e) }
+    }
+    saveData()
+  }, [logs])
+
+  useEffect(() => {
+    if (JSON.stringify(retros) === JSON.stringify(initialRetros)) return
+    const saveData = async () => {
+      try { await redis.set('db-retros', JSON.stringify(retros)) } catch (e) { console.error(e) }
+    }
+    saveData()
+  }, [retros])
+
 
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
@@ -1271,15 +1340,41 @@ export default function App() {
           </div>
 
           {/* Nav */}
-          <nav style={{ display: 'flex', alignItems: 'stretch', gap: 0, overflowX: 'auto' }}>
-            {NAV.map(n => (
-              <button key={n.id} onClick={() => setPage(n.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 18px', background: 'none', border: 'none', borderBottom: `2px solid ${page === n.id ? '#1A1816' : 'transparent'}`, cursor: 'pointer', color: page === n.id ? '#1A1816' : '#7A746C', fontSize: 13, fontFamily: 'Inter, sans-serif', fontWeight: page === n.id ? 600 : 400, transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
-                <span style={{ fontSize: 14 }}>{n.icon}</span>
-                {n.label}
-              </button>
-            ))}
-          </nav>
+<nav style={{ 
+  display: 'flex', 
+  alignItems: 'stretch', 
+  gap: 0, 
+  overflowX: 'auto',          // 👈 가로 스크롤을 활성화합니다.
+  WebkitOverflowScrolling: 'touch', // 👈 모바일에서 부드러운 스크롤을 지원합니다.
+  msOverflowStyle: 'none',    // IE 스크롤바 숨기기
+  scrollbarWidth: 'none'      // 파이어폭스 스크롤바 숨기기
+}}>
+          {NAV.map(n => (
+          <button key={n.id} onClick={() => setPage(n.id)}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 7, 
+              padding: '0 18px', 
+              background: 'none', 
+              border: 'none', 
+              borderBottom: `2px solid ${page === n.id ? '#1A1816' : 'transparent'}`, 
+              cursor: 'pointer', 
+              color: page === n.id ? '#1A1816' : '#7A746C', 
+              fontSize: 13, 
+              fontFamily: 'Inter, sans-serif', 
+              fontWeight: page === n.id ? 600 : 400, 
+              transition: 'all 0.15s', 
+              whiteSpace: 'nowrap',
+              flexShrink: 0
+            }}>
+            <span style={{ fontSize: 14 }}>{n.icon}</span>
+            {n.label}
+          </button>
+        ))}
+
+</nav>
+
         </div>
       </header>
 
