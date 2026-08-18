@@ -1208,13 +1208,15 @@ const NAV: { id: Page; label: string; icon: string }[] = [
 / --------------------------------------------------
 // [위치 2] 컴포넌트(함수) 바깥쪽, 상단 코드 바로 아래
 // --------------------------------------------------
-// 1211행 지우고 이 코드를 그대로 붙여넣기 하세요.
-const options = {
-  url: import.meta.env.VITE_KV_REST_API_URL || '',
-  token: import.meta.env.VITE_KV_REST_API_TOKEN || ''
-};
+export default function App() {
+  // 👈 [여기에 복사 붙여넣기] 컴포넌트 내부로 안전하게 자리를 이동합니다.
+  const redis = new Redis({
+    url: import.meta.env.VITE_KV_REST_API_URL || '',
+    token: import.meta.env.VITE_KV_REST_API_TOKEN || '',
+  });
 
-const redis = new Redis(options);
+  const [page, setPage] = useState<Page>('routine')
+  // ... 기존의 useState 코드들 이어서 시작 ...
 
 
 
