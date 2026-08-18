@@ -1,0 +1,11 @@
+{
+  "title": "SY Daily Routine",
+  "description": "Streamline your daily tasks with a user-friendly app designed for individuals seeking to enhance productivity and maintain consistent routines.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
