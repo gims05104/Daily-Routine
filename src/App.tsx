@@ -1208,7 +1208,9 @@ const NAV: { id: Page; label: string; icon: string } = [
 // 최신 Vite/Rolldown 빌드 엔진의 토큰 에러를 완벽하게 우회하는 안전한 문자열 선언 방식입니다.
 const KV_URL = String(import.meta.env.VITE_KV_REST_API_URL || '');
 const KV_TOKEN = String(import.meta.env.VITE_KV_REST_API_TOKEN || '');
-const [page, setPage] = useState<Page>('routine')
+
+export default function App() {
+ const [page, setPage] = useState<Page>('routine')
 
 
   // 검색이 여러 탭의 데이터를 가로질러 동작하도록 최상위에서 관리
