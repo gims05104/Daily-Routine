@@ -1205,20 +1205,23 @@ const NAV: { id: Page; label: string; icon: string }[] = [
 ]
 
 / --------------------------------------------------
-// [위치 2] 컴포넌트(함수) 바깥쪽, 상단 코드 바로 아래
-// --------------------------------------------------
-export default function App() {
-  // 👈 [여기에 복사 붙여넣기] 컴포넌트 내부로 안전하게 자리를 이동합니다.
-  // 빌드 에러 유발 요소를 완벽히 제거한 온라인 DB 연결 값 설정
-const KV_URL = import.meta.env.VITE_KV_REST_API_URL || '';
-const KV_TOKEN = import.meta.env.VITE_KV_REST_API_TOKEN || '';
+// ─── App Shell ────────────────────────────────────────────
 
+const NAV: { id: Page; label: string; icon: string }[] = [
+  { id: 'routine', label: '루틴', icon: '◎' },
+  { id: 'jobs', label: '채용공고', icon: '◈' },
+  { id: 'log', label: '일지', icon: '◇' },
+  { id: 'retro', label: '회고록', icon: '✦' },
+  { id: 'calendar', label: '캘린더', icon: '▦' },
+]
 
-
- // 👈 [추가] DB 연결 열쇠 초기화
+// 최신 Vite/Rolldown 빌드 엔진의 토큰 에러를 완벽하게 우회하는 안전한 문자열 선언 방식입니다.
+const KV_URL = String(import.meta.env.VITE_KV_REST_API_URL || '');
+const KV_TOKEN = String(import.meta.env.VITE_KV_REST_API_TOKEN || '');
 
 export default function App() {
   const [page, setPage] = useState<Page>('routine')
+
 
   // 검색이 여러 탭의 데이터를 가로질러 동작하도록 최상위에서 관리
   const [jobs, setJobs] = useState<Job[]>(initialJobs)
