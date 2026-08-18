@@ -1208,14 +1208,14 @@ const NAV: { id: Page; label: string; icon: string }[] = [
 / --------------------------------------------------
 // [위치 2] 컴포넌트(함수) 바깥쪽, 상단 코드 바로 아래
 // --------------------------------------------------
-// 빌드 엔진(Vite/Rolldown)의 문법 분석 에러를 완벽히 우회하기 위한 정제된 선언 방식입니다.
-const redisUrl = import.meta.env.VITE_KV_REST_API_URL || '';
-const redisToken = import.meta.env.VITE_KV_REST_API_TOKEN || '';
+// 1211행 지우고 이 코드를 그대로 붙여넣기 하세요.
+const options = {
+  url: import.meta.env.VITE_KV_REST_API_URL || '',
+  token: import.meta.env.VITE_KV_REST_API_TOKEN || ''
+};
 
-const redis = new Redis({
-  url: redisUrl,
-  token: redisToken,
-});
+const redis = new Redis(options);
+
 
 
  // 👈 [추가] DB 연결 열쇠 초기화
