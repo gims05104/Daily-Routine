@@ -72,6 +72,14 @@ type Retro = {
   diary: string
 }
 
+type Note = {
+  id: string
+  title: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
 /* ─── Initial data (DB에 아직 아무것도 없을 때 보여줄 기본값) ──── */
 
 const initialRoutines: Routine[] = [
@@ -265,7 +273,7 @@ function LinkTag({ url }: { url: string }) {
 
 /* ─── Search ──────────────────────────────────────────────── */
 
-type Page = 'routine' | 'jobs' | 'log' | 'retro' | 'calendar'
+type Page = 'routine' | 'jobs' | 'log' | 'retro' | 'calendar' | 'notes'
 
 type SearchResult = {
   key: string
@@ -1199,6 +1207,165 @@ function CalendarPage({
   )
 }
 
+/* ─── Page: 메모 ─────────────────────────────────────────── */
+
+function NotesPage({
+  notes, setNotes,
+}: {
+  notes: Note[]
+  setNotes: React.Dispatch<React.SetStateAction<Note[]>>
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(notes[0]?.id ?? null)
+  const editorRef = useRef<HTMLDivElement>(null)
+  const selectedNote = notes.find(note => note.id === selectedId) ?? null
+
+  useEffect(() => {
+    if (selectedNote && editorRef.current) {
+      editorRef.current.innerHTML = selectedNote.content
+    }
+  }, [selectedNote?.id])
+
+  const updateNote = (id: string, patch: Partial<Pick<Note, 'title' | 'content'>>) => {
+    setNotes(current => current.map(note => note.id === id
+      ? { ...note, ...patch, updatedAt: new Date().toISOString() }
+      : note,
+    ))
+  }
+
+  const createNote = () => {
+    const now = new Date().toISOString()
+    const note: Note = {
+      id: crypto.randomUUID(),
+      title: '새 메모',
+      content: '<p><br></p>',
+      createdAt: now,
+      updatedAt: now,
+    }
+    setNotes(current => [note, ...current])
+    setSelectedId(note.id)
+    window.setTimeout(() => editorRef.current?.focus(), 0)
+  }
+
+  const deleteNote = () => {
+    if (!selectedNote) return
+    if (!window.confirm(`'${selectedNote.title || '제목 없는 메모'}'를 삭제할까요?`)) return
+    const remaining = notes.filter(note => note.id !== selectedNote.id)
+    setNotes(remaining)
+    setSelectedId(remaining[0]?.id ?? null)
+  }
+
+  const applyCommand = (command: string, value?: string) => {
+    if (!selectedNote || !editorRef.current) return
+    editorRef.current.focus()
+    document.execCommand(command, false, value)
+    updateNote(selectedNote.id, { content: editorRef.current.innerHTML })
+  }
+
+  const addLink = () => {
+    const selectedText = window.getSelection()?.toString().trim()
+    if (!selectedText) {
+      window.alert('먼저 링크로 만들 문장을 드래그해 선택하세요.')
+      return
+    }
+    const entered = window.prompt('연결할 주소를 입력하세요.', 'https://')?.trim()
+    if (!entered) return
+    const url = /^https?:\/\//i.test(entered) ? entered : `https://${entered}`
+    applyCommand('createLink', url)
+  }
+
+  const insertTable = () => {
+    const cell = 'border:1px solid #D4CFC8;padding:8px;min-width:90px;vertical-align:top;'
+    const header = 'border:1px solid #D4CFC8;padding:8px;min-width:90px;background:#F5F3EF;font-weight:600;vertical-align:top;'
+    const table = `<table style="border-collapse:collapse;width:100%;margin:12px 0;"><thead><tr><th style="${header}">항목</th><th style="${header}">내용</th></tr></thead><tbody><tr><td style="${cell}"><br></td><td style="${cell}"><br></td></tr><tr><td style="${cell}"><br></td><td style="${cell}"><br></td></tr></tbody></table><p><br></p>`
+    applyCommand('insertHTML', table)
+  }
+
+  const plainPreview = (content: string) => content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  const toolbarButton: React.CSSProperties = { border: '1px solid #D4CFC8', background: '#FFFFFF', borderRadius: 4, minWidth: 31, height: 30, padding: '0 8px', color: '#3D3833', cursor: 'pointer', fontSize: 12, fontFamily: 'Inter, sans-serif' }
+
+  return (
+    <section>
+      <style>{`
+        .notes-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: 540px; border: 1px solid #D4CFC8; border-radius: 7px; overflow: hidden; background: #FFFFFF; }
+        .notes-sidebar { background: #FAF9F7; border-right: 1px solid #D4CFC8; padding: 12px; }
+        .notes-editor { min-width: 0; display: flex; flex-direction: column; }
+        .notes-content:focus { outline: none; }
+        .notes-content a { color: #5C7DB8; text-decoration: underline; }
+        .notes-content table { max-width: 100%; }
+        @media (max-width: 640px) {
+          .notes-layout { grid-template-columns: 1fr; }
+          .notes-sidebar { border-right: none; border-bottom: 1px solid #D4CFC8; }
+          .notes-list { display: flex; overflow-x: auto; gap: 7px; padding-bottom: 2px; }
+          .notes-list button { min-width: 150px; }
+        }
+      `}</style>
+
+      <div style={{ display: 'flex', alignItems: 'end', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 11, letterSpacing: '0.08em', color: '#7A746C', fontWeight: 600, marginBottom: 5 }}>NOTES</div>
+          <h1 style={{ fontFamily: 'DM Serif Display, serif', fontSize: 28, fontWeight: 400, color: '#1A1816', margin: 0 }}>메모</h1>
+        </div>
+        <button onClick={createNote} style={{ border: '1px solid #1A1816', borderRadius: 4, background: '#1A1816', color: '#F5F3EF', padding: '9px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ 새 메모</button>
+      </div>
+
+      <div className="notes-layout">
+        <aside className="notes-sidebar">
+          <div style={{ color: '#7A746C', fontSize: 11, margin: '0 0 9px 4px' }}>내 메모 {notes.length}</div>
+          <div className="notes-list" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {notes.length === 0 ? (
+              <div style={{ padding: '14px 4px', color: '#8C867E', fontSize: 12, lineHeight: 1.5 }}>새 메모를 만들어 생각을 기록하세요.</div>
+            ) : notes.map(note => (
+              <button key={note.id} onClick={() => setSelectedId(note.id)}
+                style={{ width: '100%', border: `1px solid ${selectedId === note.id ? '#9B948A' : 'transparent'}`, borderRadius: 4, background: selectedId === note.id ? '#FFFFFF' : 'transparent', padding: '10px', textAlign: 'left', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
+                <div style={{ color: '#1A1816', fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>{note.title || '제목 없는 메모'}</div>
+                <div style={{ color: '#8C867E', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plainPreview(note.content) || '내용 없음'}</div>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div className="notes-editor">
+          {selectedNote ? (
+            <>
+              <div style={{ padding: '18px 20px 12px', borderBottom: '1px solid #E8E4DE' }}>
+                <input value={selectedNote.title} onChange={event => updateNote(selectedNote.id, { title: event.target.value })} placeholder="메모 제목"
+                  style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', background: 'transparent', fontFamily: 'DM Serif Display, serif', color: '#1A1816', fontSize: 25, padding: 0 }} />
+                <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5 }}>
+                  <button type="button" title="굵게" onMouseDown={event => { event.preventDefault(); applyCommand('bold') }} style={{ ...toolbarButton, fontWeight: 800 }}>B</button>
+                  <button type="button" title="기울임" onMouseDown={event => { event.preventDefault(); applyCommand('italic') }} style={{ ...toolbarButton, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}>I</button>
+                  <button type="button" title="밑줄" onMouseDown={event => { event.preventDefault(); applyCommand('underline') }} style={{ ...toolbarButton, textDecoration: 'underline' }}>U</button>
+                  <span style={{ width: 1, height: 20, background: '#D4CFC8', margin: '0 2px' }} />
+                  <button type="button" title="제목 크기" onMouseDown={event => { event.preventDefault(); applyCommand('formatBlock', 'h2') }} style={toolbarButton}>제목</button>
+                  <button type="button" title="본문 크기" onMouseDown={event => { event.preventDefault(); applyCommand('formatBlock', 'p') }} style={toolbarButton}>본문</button>
+                  <select aria-label="글자 색" defaultValue="#1A1816" onChange={event => applyCommand('foreColor', event.target.value)} style={{ ...toolbarButton, width: 38, padding: 3 }}>
+                    <option value="#1A1816">●</option><option value="#C27B7B">●</option><option value="#5C7DB8">●</option><option value="#4B8B6A">●</option><option value="#C2843E">●</option>
+                  </select>
+                  <span style={{ width: 1, height: 20, background: '#D4CFC8', margin: '0 2px' }} />
+                  <button type="button" title="링크 추가" onMouseDown={event => { event.preventDefault(); addLink() }} style={toolbarButton}>🔗</button>
+                  <button type="button" title="표 추가" onMouseDown={event => { event.preventDefault(); insertTable() }} style={toolbarButton}>표</button>
+                  <button type="button" title="글머리 기호" onMouseDown={event => { event.preventDefault(); applyCommand('insertUnorderedList') }} style={toolbarButton}>• 목록</button>
+                  <button type="button" title="서식 지우기" onMouseDown={event => { event.preventDefault(); applyCommand('removeFormat'); applyCommand('unlink') }} style={toolbarButton}>서식 지움</button>
+                </div>
+              </div>
+              <div ref={editorRef} className="notes-content" contentEditable suppressContentEditableWarning
+                onInput={event => updateNote(selectedNote.id, { content: event.currentTarget.innerHTML })}
+                onPaste={event => { event.preventDefault(); document.execCommand('insertText', false, event.clipboardData.getData('text/plain')) }}
+                data-placeholder="여기에 자유롭게 메모하세요. 위 도구로 굵게, 색, 링크와 표를 넣을 수 있습니다."
+                style={{ flex: 1, minHeight: 330, padding: '20px', boxSizing: 'border-box', color: '#2A2723', fontSize: 15, lineHeight: 1.8, fontFamily: 'Inter, sans-serif', overflowWrap: 'anywhere' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, borderTop: '1px solid #E8E4DE', padding: '10px 20px', color: '#8C867E', fontSize: 10 }}>
+                <span>자동 저장됩니다</span>
+                <button onClick={deleteNote} style={{ border: 'none', background: 'transparent', color: '#B46666', cursor: 'pointer', fontSize: 10 }}>메모 삭제</button>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'grid', placeItems: 'center', flex: 1, minHeight: 400, color: '#7A746C', fontSize: 13 }}>왼쪽에서 메모를 선택하거나 새 메모를 만드세요.</div>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 /* ─── App Shell ──────────────────────────────────────────── */
 
 type CloudData = {
@@ -1207,6 +1374,7 @@ type CloudData = {
   retros: Retro[]
   routines: Routine[]
   events: CalEvent[]
+  notes: Note[]
 }
 
 type SyncState = 'loading' | 'saving' | 'saved' | 'error'
@@ -1278,6 +1446,7 @@ const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'log', label: '일지', icon: '◇' },
   { id: 'retro', label: '회고록', icon: '✦' },
   { id: 'calendar', label: '캘린더', icon: '▦' },
+  { id: 'notes', label: '메모', icon: '▤' },
 ]
 
 export default function App() {
@@ -1289,6 +1458,7 @@ export default function App() {
   const [retros, setRetros] = useLocalStorage<Retro[]>('daily-routine:retros', initialRetros)
   const [routines, setRoutines] = useLocalStorage<Routine[]>('daily-routine:routines', initialRoutines)
   const [events, setEvents] = useLocalStorage<CalEvent[]>('daily-routine:events', initialEvents)
+  const [notes, setNotes] = useLocalStorage<Note[]>('daily-routine:notes', [])
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(false)
   const [cloudLoaded, setCloudLoaded] = useState(false)
@@ -1348,6 +1518,7 @@ export default function App() {
         if (Array.isArray(saved.retros)) setRetros(saved.retros)
         if (Array.isArray(saved.routines)) setRoutines(saved.routines)
         if (Array.isArray(saved.events)) setEvents(saved.events)
+        if (Array.isArray(saved.notes)) setNotes(saved.notes)
       }
 
       setCloudLoaded(true)
@@ -1362,7 +1533,7 @@ export default function App() {
   useEffect(() => {
     if (!session || !cloudLoaded) return
 
-    const payload: CloudData = { jobs, logs, retros, routines, events }
+    const payload: CloudData = { jobs, logs, retros, routines, events, notes }
     setSyncState('saving')
 
     const timer = window.setTimeout(async () => {
@@ -1380,7 +1551,7 @@ export default function App() {
     }, 600)
 
     return () => window.clearTimeout(timer)
-  }, [session?.user.id, cloudLoaded, jobs, logs, retros, routines, events])
+  }, [session?.user.id, cloudLoaded, jobs, logs, retros, routines, events, notes])
 
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
@@ -1522,6 +1693,7 @@ export default function App() {
         {page === 'log' && <LogPage logs={logs} setLogs={setLogs} jumpLog={jumpLog} />}
         {page === 'retro' && <RetroPage retros={retros} setRetros={setRetros} jumpRetro={jumpRetro} />}
         {page === 'calendar' && <CalendarPage events={events} setEvents={setEvents} />}
+        {page === 'notes' && <NotesPage notes={notes} setNotes={setNotes} />}
       </main>
     </div>
   )
