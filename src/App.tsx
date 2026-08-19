@@ -1254,14 +1254,55 @@ function NotesPage({
     setSelectedId(remaining[0]?.id ?? null)
   }
 
+  const savedSelectionRef = useRef<Range | null>(null)
+
+  const rememberSelection = () => {
+    const editor = editorRef.current
+    const selection = window.getSelection()
+    if (!editor || !selection || selection.rangeCount === 0) return
+    const range = selection.getRangeAt(0)
+    if (editor.contains(range.commonAncestorContainer)) {
+      savedSelectionRef.current = range.cloneRange()
+    }
+  }
+
+  const restoreSelection = () => {
+    const selection = window.getSelection()
+    const range = savedSelectionRef.current
+    if (!selection || !range) return
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
+
+  const persistEditor = () => {
+    if (selectedNote && editorRef.current) {
+      updateNote(selectedNote.id, { content: editorRef.current.innerHTML })
+    }
+  }
+
   const applyCommand = (command: string, value?: string) => {
     if (!selectedNote || !editorRef.current) return
     editorRef.current.focus()
+    restoreSelection()
     document.execCommand(command, false, value)
-    updateNote(selectedNote.id, { content: editorRef.current.innerHTML })
+    rememberSelection()
+    persistEditor()
+  }
+
+  const applyFontSize = (size: number) => {
+    if (!editorRef.current) return
+    applyCommand('fontSize', '7')
+    editorRef.current.querySelectorAll('font[size="7"]').forEach(font => {
+      const span = document.createElement('span')
+      span.style.fontSize = `${size}px`
+      span.innerHTML = font.innerHTML
+      font.replaceWith(span)
+    })
+    persistEditor()
   }
 
   const addLink = () => {
+    restoreSelection()
     const selectedText = window.getSelection()?.toString().trim()
     if (!selectedText) {
       window.alert('먼저 링크로 만들 문장을 드래그해 선택하세요.')
@@ -1280,6 +1321,77 @@ function NotesPage({
     applyCommand('insertHTML', table)
   }
 
+  const getActiveCell = () => {
+    restoreSelection()
+    const node = window.getSelection()?.anchorNode
+    const element = node instanceof Element ? node : node?.parentElement
+    return element?.closest('td, th') as HTMLTableCellElement | null
+  }
+
+  const setCellStyle = (cell: HTMLTableCellElement, isHeader: boolean) => {
+    cell.style.border = '1px solid #D4CFC8'
+    cell.style.padding = '8px'
+    cell.style.minWidth = '90px'
+    cell.style.verticalAlign = 'top'
+    if (isHeader) {
+      cell.style.background = '#F5F3EF'
+      cell.style.fontWeight = '600'
+    }
+  }
+
+  const tableAction = (action: 'addRowAbove' | 'addRowBelow' | 'addColumnLeft' | 'addColumnRight' | 'deleteRow' | 'deleteColumn') => {
+    const cell = getActiveCell()
+    if (!cell) {
+      window.alert('먼저 수정할 표의 칸을 클릭하세요.')
+      return
+    }
+    const row = cell.parentElement as HTMLTableRowElement
+    const table = cell.closest('table')
+    if (!table || !row) return
+    const rowIndex = Array.from(table.rows).indexOf(row)
+    const columnIndex = cell.cellIndex
+
+    if (action === 'addRowAbove' || action === 'addRowBelow') {
+      const newRow = table.insertRow(rowIndex + (action === 'addRowBelow' ? 1 : 0))
+      Array.from(row.cells).forEach(existing => {
+        const newCell = document.createElement(existing.tagName.toLowerCase()) as HTMLTableCellElement
+        setCellStyle(newCell, existing.tagName === 'TH')
+        newCell.innerHTML = '<br>'
+        newRow.appendChild(newCell)
+      })
+    }
+
+    if (action === 'addColumnLeft' || action === 'addColumnRight') {
+      const insertAt = columnIndex + (action === 'addColumnRight' ? 1 : 0)
+      Array.from(table.rows).forEach(existingRow => {
+        const reference = existingRow.cells[insertAt]
+        const tag = existingRow.cells[columnIndex]?.tagName.toLowerCase() || 'td'
+        const newCell = document.createElement(tag) as HTMLTableCellElement
+        setCellStyle(newCell, tag === 'th')
+        newCell.innerHTML = '<br>'
+        existingRow.insertBefore(newCell, reference ?? null)
+      })
+    }
+
+    if (action === 'deleteRow') {
+      if (table.rows.length <= 1) {
+        window.alert('표에는 행이 최소 한 개 필요합니다.')
+        return
+      }
+      row.remove()
+    }
+
+    if (action === 'deleteColumn') {
+      if (row.cells.length <= 1) {
+        window.alert('표에는 열이 최소 한 개 필요합니다.')
+        return
+      }
+      Array.from(table.rows).forEach(existingRow => existingRow.cells[columnIndex]?.remove())
+    }
+
+    persistEditor()
+  }
+
   const plainPreview = (content: string) => content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
   const toolbarButton: React.CSSProperties = { border: '1px solid #D4CFC8', background: '#FFFFFF', borderRadius: 4, minWidth: 31, height: 30, padding: '0 8px', color: '#3D3833', cursor: 'pointer', fontSize: 12, fontFamily: 'Inter, sans-serif' }
 
@@ -1292,6 +1404,8 @@ function NotesPage({
         .notes-content:focus { outline: none; }
         .notes-content a { color: #5C7DB8; text-decoration: underline; }
         .notes-content table { max-width: 100%; }
+        .notes-content td:focus, .notes-content th:focus { outline: 2px solid #8B9EC2; outline-offset: -2px; }
+        .notes-table-tools { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 20px; border-bottom: 1px solid #E8E4DE; background: #FAF9F7; }
         @media (max-width: 640px) {
           .notes-layout { grid-template-columns: 1fr; }
           .notes-sidebar { border-right: none; border-bottom: 1px solid #D4CFC8; }
@@ -1335,20 +1449,34 @@ function NotesPage({
                   <button type="button" title="기울임" onMouseDown={event => { event.preventDefault(); applyCommand('italic') }} style={{ ...toolbarButton, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}>I</button>
                   <button type="button" title="밑줄" onMouseDown={event => { event.preventDefault(); applyCommand('underline') }} style={{ ...toolbarButton, textDecoration: 'underline' }}>U</button>
                   <span style={{ width: 1, height: 20, background: '#D4CFC8', margin: '0 2px' }} />
-                  <button type="button" title="제목 크기" onMouseDown={event => { event.preventDefault(); applyCommand('formatBlock', 'h2') }} style={toolbarButton}>제목</button>
-                  <button type="button" title="본문 크기" onMouseDown={event => { event.preventDefault(); applyCommand('formatBlock', 'p') }} style={toolbarButton}>본문</button>
-                  <select aria-label="글자 색" defaultValue="#1A1816" onChange={event => applyCommand('foreColor', event.target.value)} style={{ ...toolbarButton, width: 38, padding: 3 }}>
-                    <option value="#1A1816">●</option><option value="#C27B7B">●</option><option value="#5C7DB8">●</option><option value="#4B8B6A">●</option><option value="#C2843E">●</option>
+                  <select aria-label="글자 크기" defaultValue="15" onMouseDown={rememberSelection} onChange={event => applyFontSize(Number(event.target.value))} style={{ ...toolbarButton, width: 74, padding: '0 5px' }}>
+                    <option value="12">아주 작게</option>
+                    <option value="14">작게</option>
+                    <option value="15">보통</option>
+                    <option value="18">크게</option>
+                    <option value="22">아주 크게</option>
+                  </select>
+                  <select aria-label="글자 색" defaultValue="#1A1816" onMouseDown={rememberSelection} onChange={event => applyCommand('foreColor', event.target.value)} style={{ ...toolbarButton, width: 52, padding: 3 }}>
+                    <option value="#1A1816">검정</option><option value="#C27B7B">빨강</option><option value="#5C7DB8">파랑</option><option value="#4B8B6A">초록</option><option value="#C2843E">주황</option>
                   </select>
                   <span style={{ width: 1, height: 20, background: '#D4CFC8', margin: '0 2px' }} />
-                  <button type="button" title="링크 추가" onMouseDown={event => { event.preventDefault(); addLink() }} style={toolbarButton}>🔗</button>
-                  <button type="button" title="표 추가" onMouseDown={event => { event.preventDefault(); insertTable() }} style={toolbarButton}>표</button>
-                  <button type="button" title="글머리 기호" onMouseDown={event => { event.preventDefault(); applyCommand('insertUnorderedList') }} style={toolbarButton}>• 목록</button>
-                  <button type="button" title="서식 지우기" onMouseDown={event => { event.preventDefault(); applyCommand('removeFormat'); applyCommand('unlink') }} style={toolbarButton}>서식 지움</button>
+                  <button type="button" title="링크 추가" onMouseDown={event => { event.preventDefault(); addLink() }} style={toolbarButton}>🔗 링크</button>
+                  <button type="button" title="표 추가" onMouseDown={event => { event.preventDefault(); insertTable() }} style={toolbarButton}>표 추가</button>
                 </div>
               </div>
+              <div className="notes-table-tools">
+                <span style={{ fontSize: 10, color: '#7A746C', alignSelf: 'center', marginRight: 3 }}>표 수정: 표 칸을 클릭한 뒤</span>
+                <button type="button" onMouseDown={event => { event.preventDefault(); tableAction('addRowAbove') }} style={toolbarButton}>위 행 +</button>
+                <button type="button" onMouseDown={event => { event.preventDefault(); tableAction('addRowBelow') }} style={toolbarButton}>아래 행 +</button>
+                <button type="button" onMouseDown={event => { event.preventDefault(); tableAction('addColumnLeft') }} style={toolbarButton}>왼쪽 열 +</button>
+                <button type="button" onMouseDown={event => { event.preventDefault(); tableAction('addColumnRight') }} style={toolbarButton}>오른쪽 열 +</button>
+                <button type="button" onMouseDown={event => { event.preventDefault(); tableAction('deleteRow') }} style={{ ...toolbarButton, color: '#B46666' }}>행 삭제</button>
+                <button type="button" onMouseDown={event => { event.preventDefault(); tableAction('deleteColumn') }} style={{ ...toolbarButton, color: '#B46666' }}>열 삭제</button>
+              </div>
               <div ref={editorRef} className="notes-content" contentEditable suppressContentEditableWarning
-                onInput={event => updateNote(selectedNote.id, { content: event.currentTarget.innerHTML })}
+                onInput={event => { rememberSelection(); updateNote(selectedNote.id, { content: event.currentTarget.innerHTML }) }}
+                onMouseUp={rememberSelection}
+                onKeyUp={rememberSelection}
                 onPaste={event => { event.preventDefault(); document.execCommand('insertText', false, event.clipboardData.getData('text/plain')) }}
                 data-placeholder="여기에 자유롭게 메모하세요. 위 도구로 굵게, 색, 링크와 표를 넣을 수 있습니다."
                 style={{ flex: 1, minHeight: 330, padding: '20px', boxSizing: 'border-box', color: '#2A2723', fontSize: 15, lineHeight: 1.8, fontFamily: 'Inter, sans-serif', overflowWrap: 'anywhere' }} />
