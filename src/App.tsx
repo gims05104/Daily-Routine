@@ -1,10 +1,6 @@
-// --------------------------------------------------
-// [위치 1] 무조건 파일의 최상단 (맨 처음)
-// --------------------------------------------------
-
-
-
 import { useState, useEffect, useRef } from 'react'
+import type { Session } from '@supabase/supabase-js'
+import { supabase } from './lib/supabase'
 
 function useLocalStorage<T>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] {
   const [value, setValue] = useState<T>(() => {
@@ -76,7 +72,7 @@ type Retro = {
   diary: string
 }
 
-/* ─── Initial data ───────────────────────────────────────── */
+/* ─── Initial data (DB에 아직 아무것도 없을 때 보여줄 기본값) ──── */
 
 const initialRoutines: Routine[] = [
   { id: '1', title: '기상 & 스트레칭', duration: '10분', time: '06:30', done: false, category: 'morning', icon: '☀️' },
@@ -327,8 +323,13 @@ function buildSearchResults(query: string, jobs: Job[], logs: LogEntry[], retros
 
 /* ─── Page: 루틴 ─────────────────────────────────────────── */
 
-function RoutinePage() {
-  const [routines, setRoutines] = useLocalStorage<Routine[]>('daily-routines', initialRoutines)
+function RoutinePage({
+  routines, setRoutines,
+}: {
+  routines: Routine[]
+  setRoutines: React.Dispatch<React.SetStateAction<Routine[]>>
+}) {
+  // 매일 자정 done 초기화 여부는 기기별로만 의미가 있어서 localStorage 그대로 사용
   const [lastResetDate, setLastResetDate] = useLocalStorage<string>('daily-last-reset', '')
   const todayKey = new Date().toISOString().slice(0, 10)
   useEffect(() => {
@@ -965,11 +966,15 @@ function RetroPage({
 
 /* ─── Page: 캘린더 ───────────────────────────────────────── */
 
-function CalendarPage() {
+function CalendarPage({
+  events, setEvents,
+}: {
+  events: CalEvent[]
+  setEvents: React.Dispatch<React.SetStateAction<CalEvent[]>>
+}) {
   const now = new Date()
   const [viewYear, setViewYear] = useState(now.getFullYear())
   const [viewMonth, setViewMonth] = useState(now.getMonth())
-  const [events, setEvents] = useLocalStorage<CalEvent[]>('daily-events', initialEvents)
   const [selectedDate, setSelectedDate] = useState<string | null>(now.toISOString().slice(0, 10))
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -1194,10 +1199,80 @@ function CalendarPage() {
   )
 }
 
-// --------------------------------------------------
-// ─── App Shell ────────────────────────────────────────────
+/* ─── App Shell ──────────────────────────────────────────── */
 
-const NAV: { id: Page; label: string; icon: string } = [
+type CloudData = {
+  jobs: Job[]
+  logs: LogEntry[]
+  retros: Retro[]
+  routines: Routine[]
+  events: CalEvent[]
+}
+
+type SyncState = 'loading' | 'saving' | 'saved' | 'error'
+
+function AuthPage() {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [message, setMessage] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setSubmitting(true)
+    setMessage('')
+
+    const credentials = { email: email.trim(), password }
+    const result = mode === 'signin'
+      ? await supabase.auth.signInWithPassword(credentials)
+      : await supabase.auth.signUp(credentials)
+
+    setSubmitting(false)
+    if (result.error) {
+      setMessage(result.error.message)
+      return
+    }
+
+    setMessage(mode === 'signup'
+      ? '가입 확인 메일을 보냈습니다. 메일 인증 후 로그인하세요.'
+      : '로그인되었습니다.')
+  }
+
+  return (
+    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, boxSizing: 'border-box', background: '#F5F3EF', fontFamily: 'Inter, sans-serif' }}>
+      <form onSubmit={submit} style={{ width: '100%', maxWidth: 380, padding: 30, boxSizing: 'border-box', background: '#FFFFFF', border: '1px solid #D4CFC8', borderRadius: 8 }}>
+        <div style={{ fontFamily: 'DM Serif Display, serif', fontSize: 30, color: '#1A1816', marginBottom: 8 }}>Daily</div>
+        <p style={{ color: '#7A746C', fontSize: 13, lineHeight: 1.6, margin: '0 0 24px' }}>같은 계정으로 로그인하면 PC와 모바일에서 기록이 동기화됩니다.</p>
+        <label style={{ display: 'block', marginBottom: 14 }}>
+          <span style={{ display: 'block', marginBottom: 6, fontSize: 12, color: '#3D3833' }}>이메일</span>
+          <input type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #D4CFC8', borderRadius: 4, padding: '10px 12px', fontSize: 14, outline: 'none' }} />
+        </label>
+        <label style={{ display: 'block', marginBottom: 18 }}>
+          <span style={{ display: 'block', marginBottom: 6, fontSize: 12, color: '#3D3833' }}>비밀번호</span>
+          <input type="password" required minLength={6} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #D4CFC8', borderRadius: 4, padding: '10px 12px', fontSize: 14, outline: 'none' }} />
+        </label>
+        {message && <p role="status" style={{ margin: '0 0 14px', color: '#7A746C', fontSize: 12, lineHeight: 1.5 }}>{message}</p>}
+        <button disabled={submitting} style={{ width: '100%', border: 'none', borderRadius: 4, padding: '10px 14px', background: '#1A1816', color: '#F5F3EF', cursor: submitting ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
+          {submitting ? '처리 중...' : mode === 'signin' ? '로그인' : '회원가입'}
+        </button>
+        <button type="button" onClick={() => { setMode(current => current === 'signin' ? 'signup' : 'signin'); setMessage('') }} style={{ width: '100%', marginTop: 10, border: 'none', background: 'transparent', color: '#5C7DB8', cursor: 'pointer', fontSize: 12 }}>
+          {mode === 'signin' ? '처음 사용하시나요? 회원가입' : '이미 계정이 있나요? 로그인'}
+        </button>
+      </form>
+    </main>
+  )
+}
+
+function FullPageMessage({ text }: { text: string }) {
+  return (
+    <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, boxSizing: 'border-box', background: '#F5F3EF', color: '#7A746C', fontFamily: 'Inter, sans-serif', fontSize: 14 }}>
+      {text}
+    </main>
+  )
+}
+
+const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'routine', label: '루틴', icon: '◎' },
   { id: 'jobs', label: '채용공고', icon: '◈' },
   { id: 'log', label: '일지', icon: '◇' },
@@ -1205,96 +1280,107 @@ const NAV: { id: Page; label: string; icon: string } = [
   { id: 'calendar', label: '캘린더', icon: '▦' },
 ]
 
-// 최신 Vite/Rolldown 빌드 엔진의 토큰 에러를 완벽하게 우회하는 안전한 문자열 선언 방식입니다.
-const KV_URL = String(import.meta.env.VITE_KV_REST_API_URL || '');
-const KV_TOKEN = String(import.meta.env.VITE_KV_REST_API_TOKEN || '');
-
 export default function App() {
- const [page, setPage] = useState<Page>('routine')
+  const [page, setPage] = useState<Page>('routine')
 
+  // 로컬 저장소는 첫 클라우드 동기화 전의 기록을 보존하는 백업 역할도 합니다.
+  const [jobs, setJobs] = useLocalStorage<Job[]>('daily-routine:jobs', initialJobs)
+  const [logs, setLogs] = useLocalStorage<LogEntry[]>('daily-routine:logs', initialLogs)
+  const [retros, setRetros] = useLocalStorage<Retro[]>('daily-routine:retros', initialRetros)
+  const [routines, setRoutines] = useLocalStorage<Routine[]>('daily-routine:routines', initialRoutines)
+  const [events, setEvents] = useLocalStorage<CalEvent[]>('daily-routine:events', initialEvents)
+  const [session, setSession] = useState<Session | null>(null)
+  const [authReady, setAuthReady] = useState(false)
+  const [cloudLoaded, setCloudLoaded] = useState(false)
+  const [syncState, setSyncState] = useState<SyncState>('loading')
 
-  // 검색이 여러 탭의 데이터를 가로질러 동작하도록 최상위에서 관리
-  const [jobs, setJobs] = useState<Job[]>(initialJobs)
-  const [logs, setLogs] = useState<LogEntry[]>(initialLogs)
-  const [retros, setRetros] = useState<Retro[]>(initialRetros)
-
-    // 1. 앱이 처음 켜질 때 온라인 DB에서 데이터를 안전하게 원격 로딩
+  // 앱 시작 시 로그인 세션을 복원하고, 이후 로그인·로그아웃 상태 변화를 반영합니다.
   useEffect(() => {
-    const loadAllDataFromDB = async () => {
-      if (!KV_URL || !KV_TOKEN) return;
-      try {
-        // HTTP 통신으로 데이터를 직접 요청합니다 (빌드 에러 0%)
-        const res = await fetch(`${KV_URL}/mget/db-jobs/db-logs/db-retros`, {
-          headers: { Authorization: `Bearer ${KV_TOKEN}` }
-        });
-        const result = await res.json();
-        
-        if (result && Array.isArray(result.result)) {
-          const [savedJobs, savedLogs, savedRetros] = result.result;
+    let active = true
 
-          if (savedJobs) {
-            const parsedJobs = typeof savedJobs === 'string' ? JSON.parse(savedJobs) : savedJobs;
-            if (Array.isArray(parsedJobs)) setJobs(parsedJobs);
-          }
-          if (savedLogs) {
-            const parsedLogs = typeof savedLogs === 'string' ? JSON.parse(savedLogs) : savedLogs;
-            if (Array.isArray(parsedLogs)) setLogs(parsedLogs);
-          }
-          if (savedRetros) {
-            const parsedRetros = typeof savedRetros === 'string' ? JSON.parse(savedRetros) : savedRetros;
-            if (Array.isArray(parsedRetros)) setRetros(parsedRetros);
-          }
-        }
-      } catch (error) {
-        console.error('DB 데이터를 불러오는 중 오류 발생:', error);
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      if (!active) return
+      setSession(currentSession)
+      setAuthReady(true)
+      setCloudLoaded(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      setCloudLoaded(false)
+    })
+
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  // 로그인한 계정의 단일 데이터 문서를 먼저 불러옵니다.
+  useEffect(() => {
+    if (!session) {
+      setCloudLoaded(false)
+      return
+    }
+
+    let active = true
+    setCloudLoaded(false)
+    setSyncState('loading')
+
+    const loadCloudData = async () => {
+      const { data, error } = await supabase
+        .from('daily_routine_data')
+        .select('data')
+        .eq('user_id', session.user.id)
+        .maybeSingle()
+
+      if (!active) return
+      if (error) {
+        console.error('클라우드 데이터를 불러오지 못했습니다.', error)
+        setSyncState('error')
+        return
       }
-    };
-    loadAllDataFromDB();
-  }, []);
 
-  // 2. 데이터가 새로 추가되거나 바뀔 때마다 온라인 DB에 안전하게 원격 자동 저장
+      const saved = data?.data as Partial<CloudData> | undefined
+      if (saved) {
+        if (Array.isArray(saved.jobs)) setJobs(saved.jobs)
+        if (Array.isArray(saved.logs)) setLogs(saved.logs)
+        if (Array.isArray(saved.retros)) setRetros(saved.retros)
+        if (Array.isArray(saved.routines)) setRoutines(saved.routines)
+        if (Array.isArray(saved.events)) setEvents(saved.events)
+      }
+
+      setCloudLoaded(true)
+      setSyncState('saved')
+    }
+
+    loadCloudData()
+    return () => { active = false }
+  }, [session?.user.id])
+
+  // 입력 변경은 600ms 동안 묶어 한 번의 upsert로 저장합니다.
   useEffect(() => {
-    if (JSON.stringify(jobs) === JSON.stringify(initialJobs) || !KV_URL || !KV_TOKEN) return;
-    const saveData = async () => {
-      try {
-        await fetch(`${KV_URL}/set/db-jobs`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${KV_TOKEN}` },
-          body: JSON.stringify(jobs)
-        });
-      } catch (e) { console.error(e); }
-    };
-    saveData();
-  }, [jobs]);
+    if (!session || !cloudLoaded) return
 
-  useEffect(() => {
-    if (JSON.stringify(logs) === JSON.stringify(initialLogs) || !KV_URL || !KV_TOKEN) return;
-    const saveData = async () => {
-      try {
-        await fetch(`${KV_URL}/set/db-logs`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${KV_TOKEN}` },
-          body: JSON.stringify(logs)
-        });
-      } catch (e) { console.error(e); }
-    };
-    saveData();
-  }, [logs]);
+    const payload: CloudData = { jobs, logs, retros, routines, events }
+    setSyncState('saving')
 
-  useEffect(() => {
-    if (JSON.stringify(retros) === JSON.stringify(initialRetros) || !KV_URL || !KV_TOKEN) return;
-    const saveData = async () => {
-      try {
-        await fetch(`${KV_URL}/set/db-retros`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${KV_TOKEN}` },
-          body: JSON.stringify(retros)
-        });
-      } catch (e) { console.error(e); }
-    };
-    saveData();
-  }, [retros]);
+    const timer = window.setTimeout(async () => {
+      const { error } = await supabase
+        .from('daily_routine_data')
+        .upsert({ user_id: session.user.id, data: payload, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
 
+      if (error) {
+        console.error('클라우드 데이터를 저장하지 못했습니다.', error)
+        setSyncState('error')
+        return
+      }
+
+      setSyncState('saved')
+    }, 600)
+
+    return () => window.clearTimeout(timer)
+  }, [session?.user.id, cloudLoaded, jobs, logs, retros, routines, events])
 
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
@@ -1316,32 +1402,82 @@ export default function App() {
   const now = new Date()
   const dateStr = `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')}`
   const dayStr = ['SUN','MON','TUE','WED','THU','FRI','SAT'][now.getDay()]
+  const syncLabel: Record<SyncState, string> = {
+    loading: '불러오는 중',
+    saving: '저장 중',
+    saved: '동기화됨',
+    error: '저장 오류',
+  }
+
+  if (!authReady) return <FullPageMessage text="로그인 상태를 확인하고 있습니다..." />
+  if (!session) return <AuthPage />
+  if (!cloudLoaded) return <FullPageMessage text="클라우드 데이터를 불러오는 중입니다..." />
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#F5F3EF', fontFamily: 'Inter, sans-serif' }}>
       {/* Header */}
       <header style={{ borderBottom: '1px solid #D4CFC8', backgroundColor: '#F5F3EF', position: 'sticky', top: 0, zIndex: 10 }}>
-        <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px', display: 'flex', alignItems: 'stretch', height: 56 }}>
+        {/* 모바일(≤640px)에서 헤더가 두 줄로 접히고 탭이 전체 폭으로 스크롤되도록 하는 반응형 규칙 */}
+        <style>{`
+          .daily-header-inner {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 0 24px;
+            display: flex;
+            align-items: stretch;
+            height: 56px;
+          }
+          .daily-logo { display: flex; align-items: center; gap: 10px; margin-right: 24px; flex-shrink: 0; }
+          .daily-search-wrap { position: relative; display: flex; align-items: center; margin-right: 24px; flex-shrink: 0; }
+          .daily-search-input { width: 168px; box-sizing: border-box; }
+          .daily-nav {
+            display: flex;
+            align-items: stretch;
+            gap: 0;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+          }
+          .daily-nav::-webkit-scrollbar { display: none; }
+          .daily-nav-btn { flex-shrink: 0; }
+          .daily-account { display: flex; align-items: center; gap: 8px; margin-left: auto; padding-left: 12px; flex-shrink: 0; }
+          .daily-account-email { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+          @media (max-width: 640px) {
+            .daily-header-inner { flex-wrap: wrap; height: auto; padding: 10px 16px; row-gap: 8px; }
+            .daily-logo { margin-right: auto; }
+            .daily-date { display: none; }
+            .daily-search-wrap { margin-right: 0; order: 3; width: 100%; }
+            .daily-search-input { width: 100%; }
+            .daily-nav { order: 4; width: 100%; }
+            .daily-nav-btn { padding: 0 12px !important; font-size: 12px !important; }
+            .daily-account { order: 2; margin-left: 0; padding-left: 0; }
+            .daily-account-email { display: none; }
+          }
+        `}</style>
+
+        <div className="daily-header-inner">
           {/* Logo */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 24, flexShrink: 0 }}>
+          <div className="daily-logo">
             <span style={{ fontFamily: 'DM Serif Display, serif', fontSize: 18, color: '#1A1816', letterSpacing: '-0.01em' }}>Daily</span>
             <div style={{ width: 1, height: 16, backgroundColor: '#D4CFC8' }} />
-            <span style={{ fontSize: 11, color: '#7A746C', fontWeight: 500, letterSpacing: '0.06em' }}>{dayStr} {dateStr}</span>
+            <span className="daily-date" style={{ fontSize: 11, color: '#7A746C', fontWeight: 500, letterSpacing: '0.06em' }}>{dayStr} {dateStr}</span>
           </div>
 
           {/* Search */}
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', marginRight: 24, flexShrink: 0 }}>
+          <div className="daily-search-wrap">
             <span style={{ position: 'absolute', left: 10, fontSize: 12, color: '#7A746C', pointerEvents: 'none' }}>🔍</span>
             <input
+              className="daily-search-input"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
               placeholder="검색..."
-              style={{ width: 168, border: '1px solid #D4CFC8', borderRadius: 20, padding: '6px 12px 6px 28px', fontSize: 12, fontFamily: 'Inter, sans-serif', outline: 'none', backgroundColor: '#FFFFFF', color: '#1A1816' }}
+              style={{ border: '1px solid #D4CFC8', borderRadius: 20, padding: '6px 12px 6px 28px', fontSize: 12, fontFamily: 'Inter, sans-serif', outline: 'none', backgroundColor: '#FFFFFF', color: '#1A1816' }}
             />
             {searchFocused && searchQuery.trim() && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 320, maxHeight: 380, overflowY: 'auto', background: '#FFFFFF', border: '1px solid #D4CFC8', borderRadius: 6, boxShadow: '0 10px 28px rgba(26,24,22,0.12)', zIndex: 50 }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 320, maxWidth: '90vw', maxHeight: 380, overflowY: 'auto', background: '#FFFFFF', border: '1px solid #D4CFC8', borderRadius: 6, boxShadow: '0 10px 28px rgba(26,24,22,0.12)', zIndex: 50 }}>
                 {searchResults.length === 0 ? (
                   <div style={{ padding: '18px 14px', fontSize: 12, color: '#7A746C', textAlign: 'center' }}>
                     '{searchQuery}'에 대한 검색 결과가 없어요
@@ -1361,51 +1497,31 @@ export default function App() {
           </div>
 
           {/* Nav */}
-<nav style={{ 
-  display: 'flex', 
-  alignItems: 'stretch', 
-  gap: 0, 
-  overflowX: 'auto',          // 👈 가로 스크롤을 활성화합니다.
-  WebkitOverflowScrolling: 'touch', // 👈 모바일에서 부드러운 스크롤을 지원합니다.
-  msOverflowStyle: 'none',    // IE 스크롤바 숨기기
-  scrollbarWidth: 'none'      // 파이어폭스 스크롤바 숨기기
-}}>
-          {NAV.map(n => (
-          <button key={n.id} onClick={() => setPage(n.id)}
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 7, 
-              padding: '0 18px', 
-              background: 'none', 
-              border: 'none', 
-              borderBottom: `2px solid ${page === n.id ? '#1A1816' : 'transparent'}`, 
-              cursor: 'pointer', 
-              color: page === n.id ? '#1A1816' : '#7A746C', 
-              fontSize: 13, 
-              fontFamily: 'Inter, sans-serif', 
-              fontWeight: page === n.id ? 600 : 400, 
-              transition: 'all 0.15s', 
-              whiteSpace: 'nowrap',
-              flexShrink: 0
-            }}>
-            <span style={{ fontSize: 14 }}>{n.icon}</span>
-            {n.label}
-          </button>
-        ))}
+          <nav className="daily-nav">
+            {NAV.map(n => (
+              <button key={n.id} className="daily-nav-btn" onClick={() => setPage(n.id)}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 18px', background: 'none', border: 'none', borderBottom: `2px solid ${page === n.id ? '#1A1816' : 'transparent'}`, cursor: 'pointer', color: page === n.id ? '#1A1816' : '#7A746C', fontSize: 13, fontFamily: 'Inter, sans-serif', fontWeight: page === n.id ? 600 : 400, transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 14 }}>{n.icon}</span>
+                {n.label}
+              </button>
+            ))}
+          </nav>
 
-</nav>
-
+          <div className="daily-account">
+            <span title={syncLabel[syncState]} style={{ fontSize: 11, color: syncState === 'error' ? '#C27B7B' : '#7A746C', whiteSpace: 'nowrap' }}>{syncLabel[syncState]}</span>
+            <span className="daily-account-email" title={session.user.email} style={{ fontSize: 11, color: '#7A746C' }}>{session.user.email}</span>
+            <button onClick={() => supabase.auth.signOut()} style={{ border: '1px solid #D4CFC8', borderRadius: 4, padding: '5px 8px', background: '#FFFFFF', color: '#7A746C', cursor: 'pointer', fontSize: 11, whiteSpace: 'nowrap' }}>로그아웃</button>
+          </div>
         </div>
       </header>
 
       {/* Main */}
       <main style={{ maxWidth: 720, margin: '0 auto', padding: '36px 24px 60px' }}>
-        {page === 'routine' && <RoutinePage />}
+        {page === 'routine' && <RoutinePage routines={routines} setRoutines={setRoutines} />}
         {page === 'jobs' && <JobsPage jobs={jobs} setJobs={setJobs} jumpJob={jumpJob} />}
         {page === 'log' && <LogPage logs={logs} setLogs={setLogs} jumpLog={jumpLog} />}
         {page === 'retro' && <RetroPage retros={retros} setRetros={setRetros} jumpRetro={jumpRetro} />}
-        {page === 'calendar' && <CalendarPage />}
+        {page === 'calendar' && <CalendarPage events={events} setEvents={setEvents} />}
       </main>
     </div>
   )
